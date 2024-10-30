@@ -5,7 +5,6 @@ import (
 	"net/http"
 )
 
-// handler Metric
 func (cfg *apiConfig) handlerMetric(w http.ResponseWriter, r *http.Request) {
 	r.Header.Add("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)

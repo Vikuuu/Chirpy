@@ -1,4 +1,3 @@
-// main
 package main
 
 import (
@@ -35,6 +34,7 @@ func main() {
 	mux.HandleFunc("GET  /api/healthz", handlerHealth)
 	mux.HandleFunc("GET  /admin/metrics", apiCfg.handlerMetric)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
+	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 
 	log.Printf("Serving file from %s on port: %s\n", filepathRoot, port)
 	log.Fatal(srv.ListenAndServe())
