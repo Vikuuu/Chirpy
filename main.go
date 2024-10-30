@@ -32,9 +32,9 @@ func main() {
 			apiCfg.middlewareMetricsInc(http.FileServer(http.Dir(filepathRoot))),
 		),
 	)
-	mux.HandleFunc("GET /healthz", handlerHealth)
-	mux.HandleFunc("GET /metrics", apiCfg.handlerMetric)
-	mux.HandleFunc("POST /reset", apiCfg.handlerReset)
+	mux.HandleFunc("GET  /api/healthz", handlerHealth)
+	mux.HandleFunc("GET  /api/metrics", apiCfg.handlerMetric)
+	mux.HandleFunc("POST /api/reset", apiCfg.handlerReset)
 
 	log.Printf("Serving file from %s on port: %s\n", filepathRoot, port)
 	log.Fatal(srv.ListenAndServe())
