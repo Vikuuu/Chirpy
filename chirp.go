@@ -9,12 +9,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Vikuuu/Chirpy/internal/auth"
 	"github.com/Vikuuu/Chirpy/internal/database"
 )
 
 type parameters struct {
-	Body   string    `json:"body"`
-	UserID uuid.UUID `json:"user_id"`
+	Body string `json:"body"`
+	// UserID uuid.UUID `json:"user_id"`
 }
 
 type respBody struct {
@@ -26,9 +27,23 @@ type respBody struct {
 }
 
 func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
+	jwtToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("error getting jwtToken: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	userID, err := auth.ValidateJWT(jwtToken, cfg.secret)
+	if err != nil {
+		log.Printf("error validating token: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	payload := parameters{}
-	err := decoder.Decode(&payload)
+	err = decoder.Decode(&payload)
 	if err != nil {
 		log.Printf("Error decoding JSON: %s", err)
 		w.WriteHeader(500)
@@ -43,7 +58,7 @@ func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
 
 	dat, err := cfg.db.CreateChirpForUser(context.Background(), database.CreateChirpForUserParams{
 		Body:   payload.Body,
-		UserID: payload.UserID,
+		UserID: userID,
 	})
 	if err != nil {
 		log.Fatalf("Error creating chirp: %s", err)

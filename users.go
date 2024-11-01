@@ -72,8 +72,23 @@ func (apiCfg *apiConfig) handlerUser(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	const unauthMsg = "incorrect email or password"
 
+	type loginParams struct {
+		Email            string `json:"email"`
+		Password         string `json:"password"`
+		ExpiresInSeconds *int   `json:"expires_in_seconds"`
+	}
+
+	type loginResponse struct {
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
+		Token     string    `json:"token"`
+	}
+
+	// decoding the input json
 	decoder := json.NewDecoder(r.Body)
-	params := userParameters{}
+	params := loginParams{}
 	err := decoder.Decode(&params)
 	if err != nil {
 		log.Printf("Error decoding JSON: %s", err)
@@ -81,6 +96,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// getting user and checking password
 	dat, err := cfg.db.GetUser(context.Background(), params.Email)
 	if err != nil {
 		respondWithError(w, 401, unauthMsg)
@@ -93,11 +109,32 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := json.Marshal(response{
+	// if everything goes well, then create jwt
+
+	expiresIn := time.Hour
+	// check for expirating time if provided
+	if params.ExpiresInSeconds != nil {
+		if *params.ExpiresInSeconds < 3600 {
+			expiresIn = time.Duration(*params.ExpiresInSeconds) * time.Second
+		}
+	}
+
+	tokenSecret := cfg.secret
+
+	jwtToken, err := auth.MakeJWT(dat.ID, tokenSecret, expiresIn)
+	if err != nil {
+		log.Fatalf("Error creating JWT token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	// return the reponse json
+	data, err := json.Marshal(loginResponse{
 		ID:        dat.ID,
 		CreatedAt: dat.CreatedAt,
 		UpdatedAt: dat.UpdatedAt,
 		Email:     dat.Email,
+		Token:     jwtToken,
 	})
 	if err != nil {
 		log.Fatalf("Error marshaling JSON: %s", err)
