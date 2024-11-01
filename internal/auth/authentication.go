@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -20,4 +23,16 @@ func CheckPasswordHash(password, hash string) error {
 		return err
 	}
 	return nil
+}
+
+func MakeRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	refreshToken := hex.EncodeToString(b)
+
+	return refreshToken, nil
 }

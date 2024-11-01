@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -23,6 +24,10 @@ type response struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+}
+
+type refreshResponse struct {
+	Token string `json:"token"`
 }
 
 func (apiCfg *apiConfig) handlerUser(w http.ResponseWriter, r *http.Request) {
@@ -73,17 +78,17 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	const unauthMsg = "incorrect email or password"
 
 	type loginParams struct {
-		Email            string `json:"email"`
-		Password         string `json:"password"`
-		ExpiresInSeconds *int   `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	type loginResponse struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Email     string    `json:"email"`
-		Token     string    `json:"token"`
+		ID           uuid.UUID `json:"id"`
+		CreatedAt    time.Time `json:"created_at"`
+		UpdatedAt    time.Time `json:"updated_at"`
+		Email        string    `json:"email"`
+		Token        string    `json:"token"`
+		RefreshToken string    `json:"refresh_token"`
 	}
 
 	// decoding the input json
@@ -112,13 +117,6 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	// if everything goes well, then create jwt
 
 	expiresIn := time.Hour
-	// check for expirating time if provided
-	if params.ExpiresInSeconds != nil {
-		if *params.ExpiresInSeconds < 3600 {
-			expiresIn = time.Duration(*params.ExpiresInSeconds) * time.Second
-		}
-	}
-
 	tokenSecret := cfg.secret
 
 	jwtToken, err := auth.MakeJWT(dat.ID, tokenSecret, expiresIn)
@@ -128,13 +126,31 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		log.Fatalf("Error creating refresh token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	// add created refresh token in the database
+	err = cfg.db.CreateRefreshToken(context.Background(), database.CreateRefreshTokenParams{
+		Token:  refreshToken,
+		UserID: dat.ID,
+	})
+	if err != nil {
+		log.Fatalf("Error adding refresh token to database: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
 	// return the reponse json
 	data, err := json.Marshal(loginResponse{
-		ID:        dat.ID,
-		CreatedAt: dat.CreatedAt,
-		UpdatedAt: dat.UpdatedAt,
-		Email:     dat.Email,
-		Token:     jwtToken,
+		ID:           dat.ID,
+		CreatedAt:    dat.CreatedAt,
+		UpdatedAt:    dat.UpdatedAt,
+		Email:        dat.Email,
+		Token:        jwtToken,
+		RefreshToken: refreshToken,
 	})
 	if err != nil {
 		log.Fatalf("Error marshaling JSON: %s", err)
@@ -145,4 +161,68 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
+}
+
+func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Fatalf("error getting refresh token: %s", err)
+		respondWithError(w, 401, "Refresh token not provided")
+	}
+
+	refreshUser, err := cfg.db.GetUserFromRefreshToken(context.Background(), refreshToken)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithError(w, 401, "not a valid refresh token")
+		} else {
+			log.Fatalf("error retrieving refresh user: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+	}
+
+	if refreshUser.ExpiresAt.Before(time.Now()) || refreshUser.RevokedAt.Valid {
+		respondWithError(w, 401, "refresh token expired")
+		return
+	}
+
+	accessToken, err := auth.MakeJWT(refreshUser.UserID, cfg.secret, time.Hour)
+	if err != nil {
+		log.Fatalf("error creating access token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	data, err := json.Marshal(refreshResponse{
+		Token: accessToken,
+	})
+	if err != nil {
+		log.Fatalf("error marshaling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
+
+func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Fatalf("error getting refresh token: %s", err)
+		respondWithError(w, 401, "Refresh token not provided")
+	}
+
+	err = cfg.db.RevokeRefreshToken(context.Background(), database.RevokeRefreshTokenParams{
+		RevokedAt: sql.NullTime{Time: time.Now(), Valid: true},
+		UpdatedAt: time.Now(),
+		Token:     refreshToken,
+	})
+	if err != nil {
+		log.Fatalf("error revoking token: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
