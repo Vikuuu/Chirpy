@@ -79,14 +79,34 @@ func (cfg *apiConfig) handlerPostChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	dat, err := cfg.db.GetChirps(context.Background())
-	if err != nil {
-		log.Fatalf("Error creating chirp: %s", err)
-		w.WriteHeader(500)
-		return
+	var data []database.Chirp
+	var err error
+	authorIDString := r.URL.Query().Get("author_id")
+
+	if authorIDString == "" {
+		data, err = cfg.db.GetChirps(context.Background())
+		if err != nil {
+			log.Fatalf("Error retrieving chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+	} else {
+		authorID, err := uuid.Parse(authorIDString)
+		if err != nil {
+			log.Fatalf("Error parsing uuid string: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		data, err = cfg.db.GetChirpsForAuthor(context.Background(), authorID)
+		if err != nil {
+			log.Fatalf("Error retrieving chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
 	}
+
 	var resp []respBody
-	for _, chirp := range dat {
+	for _, chirp := range data {
 		i := respBody{
 			ID:        chirp.ID,
 			CreatedAt: chirp.CreatedAt,
