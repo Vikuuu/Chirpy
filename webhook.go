@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+
+	"github.com/Vikuuu/Chirpy/internal/auth"
 )
 
 type polkaParams struct {
@@ -18,9 +20,21 @@ type polkaParams struct {
 }
 
 func (cfg *apiConfig) handlerPolkaWebhook(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		log.Printf("error getting Api Key: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	if apiKey != cfg.polkaKey {
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	payload := polkaParams{}
-	err := decoder.Decode(&payload)
+	err = decoder.Decode(&payload)
 	if err != nil {
 		log.Fatalf("error decoding JSON: %s", err)
 		w.WriteHeader(500)

@@ -3,6 +3,9 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"net/http"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -35,4 +38,18 @@ func MakeRefreshToken() (string, error) {
 	refreshToken := hex.EncodeToString(b)
 
 	return refreshToken, nil
+}
+
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "ApiKey ") {
+		return "", errors.New("No API key provided")
+	}
+
+	apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, "ApiKey "))
+	if apiKey == "" {
+		return "", errors.New("No API key provided")
+	}
+
+	return apiKey, nil
 }
