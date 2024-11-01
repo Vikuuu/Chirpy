@@ -226,3 +226,67 @@ func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+type updateParams struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type updateResponse struct {
+	Email string `json:"email"`
+}
+
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	jwtToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("error getting jwtToken: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	userID, err := auth.ValidateJWT(jwtToken, cfg.secret)
+	if err != nil {
+		log.Printf("error validating token: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	payload := updateParams{}
+	err = decoder.Decode(&payload)
+	if err != nil {
+		log.Fatalf("error decoding JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	hashPsswd, err := auth.HashPassword(payload.Password)
+	if err != nil {
+		log.Fatalf("error hashing password: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	updatedEmail, err := cfg.db.EditUser(context.Background(), database.EditUserParams{
+		Email:          payload.Email,
+		HashedPassword: hashPsswd,
+		UpdatedAt:      time.Now().UTC(),
+		ID:             userID,
+	})
+	if err != nil {
+		log.Fatalf("error updating user: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	data, err := json.Marshal(updateResponse{Email: updatedEmail})
+	if err != nil {
+		log.Fatalf("error marshaling JSON: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
