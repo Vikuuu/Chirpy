@@ -20,10 +20,11 @@ type userParameters struct {
 }
 
 type response struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
+	ID          uuid.UUID `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Email       string    `json:"email"`
+	IsChirpyRed bool      `json:"is_chirpy_red"`
 }
 
 type refreshResponse struct {
@@ -56,10 +57,11 @@ func (apiCfg *apiConfig) handlerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := response{
-		ID:        dat.ID,
-		CreatedAt: dat.CreatedAt,
-		UpdatedAt: dat.UpdatedAt,
-		Email:     dat.Email,
+		ID:          dat.ID,
+		CreatedAt:   dat.CreatedAt,
+		UpdatedAt:   dat.UpdatedAt,
+		Email:       dat.Email,
+		IsChirpyRed: dat.IsChirpyRed,
 	}
 
 	data, err := json.Marshal(res)
@@ -87,6 +89,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt    time.Time `json:"created_at"`
 		UpdatedAt    time.Time `json:"updated_at"`
 		Email        string    `json:"email"`
+		IsChirpyRed  bool      `json:"is_chirpy_red"`
 		Token        string    `json:"token"`
 		RefreshToken string    `json:"refresh_token"`
 	}
@@ -149,6 +152,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:    dat.CreatedAt,
 		UpdatedAt:    dat.UpdatedAt,
 		Email:        dat.Email,
+		IsChirpyRed:  dat.IsChirpyRed,
 		Token:        jwtToken,
 		RefreshToken: refreshToken,
 	})
