@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -115,6 +116,95 @@ ORDER BY created_at ASC
 
 func (q *Queries) GetChirpsForAuthor(ctx context.Context, userID uuid.UUID) ([]Chirp, error) {
 	rows, err := q.db.QueryContext(ctx, getChirpsForAuthor, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chirp
+	for rows.Next() {
+		var i Chirp
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Body,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSortedChirps = `-- name: GetSortedChirps :many
+SELECT id, created_at, updated_at, body, user_id
+FROM chirp
+ORDER BY created_at %s
+`
+
+func (q *Queries) GetSortedChirps(ctx context.Context, sort string) ([]Chirp, error) {
+	sortDirection := "ASC"
+	if sort == "desc" {
+		sortDirection = "DESC"
+	}
+
+	query := fmt.Sprintf(getSortedChirps, sortDirection)
+
+	rows, err := q.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chirp
+	for rows.Next() {
+		var i Chirp
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Body,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSortedChirpsForAuthor = `-- name: GetSortedChirpsForAuthor :many
+SELECT id, created_at, updated_at, body, user_id
+FROM chirp
+WHERE user_id = $1
+ORDER BY created_at %s
+`
+
+type GetSortedChirpsForAuthorParams struct {
+	UserID uuid.UUID
+	Sort   string
+}
+
+func (q *Queries) GetSortedChirpsForAuthor(ctx context.Context, arg GetSortedChirpsForAuthorParams) ([]Chirp, error) {
+	sortDirection := "ASC"
+	if arg.Sort == "desc" {
+		sortDirection = "DESC"
+	}
+
+	query := fmt.Sprintf(getSortedChirpsForAuthor, sortDirection)
+	rows, err := q.db.QueryContext(ctx, query, arg.UserID)
 	if err != nil {
 		return nil, err
 	}

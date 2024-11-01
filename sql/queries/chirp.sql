@@ -16,6 +16,17 @@ FROM chirp
 WHERE user_id = $1
 ORDER BY created_at ASC;
 
+-- name: GetSortedChirps :many
+SELECT id, created_at, updated_at, body, user_id
+FROM chirp
+ORDER BY created_at $1;
+
+-- name: GetSortedChirpsForAuthor :many
+SELECT id, created_at, updated_at, body, user_id
+FROM chirp
+WHERE user_id = $1
+ORDER BY created_at $2;
+
 -- name: GetChirp :one
 SELECT id, created_at, updated_at, body, user_id
 FROM chirp

@@ -82,15 +82,20 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 	var data []database.Chirp
 	var err error
 	authorIDString := r.URL.Query().Get("author_id")
+	sort := r.URL.Query().Get("sort")
 
-	if authorIDString == "" {
+	if authorIDString == "" && sort == "" {
+		// GET http://localhost:8080/api/chirp
+
 		data, err = cfg.db.GetChirps(context.Background())
 		if err != nil {
 			log.Fatalf("Error retrieving chirp: %s", err)
 			w.WriteHeader(500)
 			return
 		}
-	} else {
+	} else if authorIDString != "" && sort == "" {
+		// GET http://localhost:8080/api/chirp?author_id=1
+
 		authorID, err := uuid.Parse(authorIDString)
 		if err != nil {
 			log.Fatalf("Error parsing uuid string: %s", err)
@@ -103,6 +108,37 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(500)
 			return
 		}
+	} else if authorIDString != "" && sort != "" {
+		// GET http://localhost:8080/api/chirps?sort=asc&author_id=2
+
+		authorID, err := uuid.Parse(authorIDString)
+		if err != nil {
+			log.Fatalf("Error parsing uuid string: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		data, err = cfg.db.GetSortedChirpsForAuthor(context.Background(), database.GetSortedChirpsForAuthorParams{
+			UserID: authorID,
+			Sort:   sort,
+		})
+		if err != nil {
+			log.Fatalf("Error retrieving chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+	} else if authorIDString == "" && sort != "" {
+		// GET http://localhost:8080/api/chirps?sort=asc
+		// GET http://localhost:8080/api/chirps?sort=desc
+		data, err = cfg.db.GetSortedChirps(context.Background(), sort)
+		if err != nil {
+			log.Fatalf("Error retrieving chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+	} else {
+		log.Fatalf("Unexpected Query Parameters")
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	var resp []respBody
