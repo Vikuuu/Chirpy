@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -101,8 +102,6 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	pat := r.PathValue("chirpID")
-	log.Printf(pat)
-	log.Printf(r.Pattern)
 	chirpID, err := uuid.Parse(pat)
 	if err != nil {
 		log.Fatalf("error parsing the id: %s", err)
@@ -111,9 +110,14 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	}
 	dat, err := cfg.db.GetChirp(context.Background(), chirpID)
 	if err != nil {
-		log.Fatalf("error fetching the chirp: %s", err)
-		w.WriteHeader(http.StatusNotFound)
-		return
+		if err == sql.ErrNoRows {
+			respondWithError(w, 404, "Not Found")
+			return
+		} else {
+			log.Fatalf("error fetching the chirp: %s", err)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 	}
 
 	respPayload := respBody{
@@ -125,4 +129,63 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, 200, respPayload)
+}
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		log.Fatalf("error parsing the id: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	jwtToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("error getting jwtToken: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	userID, err := auth.ValidateJWT(jwtToken, cfg.secret)
+	if err != nil {
+		log.Printf("error validating token: %s", err)
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	// check if the author of chirp and the logged in user are same?
+	chirp, err := cfg.db.GetChirp(context.Background(), chirpID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithError(w, 404, "Not Found")
+			return
+		} else {
+			log.Fatalf("error getting chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+	}
+
+	if userID != chirp.UserID {
+		respondWithError(w, 403, "You don't have the permission to delete  this chirp")
+		return
+	}
+
+	// if the user is the chirp author
+	err = cfg.db.DeleteChirp(context.Background(), database.DeleteChirpParams{
+		UserID: userID,
+		ID:     chirpID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithError(w, 404, "chirp does not exist")
+			return
+		} else {
+			log.Fatalf("error deleting chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

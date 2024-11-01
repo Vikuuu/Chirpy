@@ -14,3 +14,7 @@ ORDER BY created_at ASC;
 SELECT id, created_at, updated_at, body, user_id
 FROM chirp
 WHERE id = $1;
+
+-- name: DeleteChirp :exec
+DELETE FROM chirp
+WHERE user_id = $1 AND id = $2;
